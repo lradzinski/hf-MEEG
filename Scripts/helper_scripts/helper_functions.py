@@ -1,3 +1,10 @@
+"""
+helper_functions.py
+Gunnar Waterstraat
+Charite Neurophysics Group
+https://github.com/neurophysics/2021-hfMEG
+"""
+
 import numpy as np
 import scipy
 import scipy.signal
@@ -210,7 +217,7 @@ def bootstrap_spectral(data, fs, nperseg, fwin, nit=1000, ci=95,
         axis = 0)
     print('Number of Fourier coefficients: %d' % f_keep.sum())
     f = f[f_keep]
-    psd_segs = scipy.signal.spectral._spectral_helper(data, data, axis=-1,
+    psd_segs = scipy.signal._spectral_py._spectral_helper(data, data, axis=-1,
             nperseg = nperseg, fs=fs, mode='psd',
             scaling='density')[2][:,f_keep,:]
     # get the indices with replacement of the array for the bootstrap
@@ -229,7 +236,7 @@ def bootstrap_spectral(data, fs, nperseg, fwin, nit=1000, ci=95,
         for i in range(nchans):
             for j in range(i):
                 print('Channel %d vs. %d.' % (i + 1, j + 1))
-                csd_segs = scipy.signal.spectral._spectral_helper(
+                csd_segs = scipy.signal._spectral_py._spectral_helper(
                 data[i], data[j], axis=-1, nperseg = nperseg, fs=fs,
                 mode='psd', scaling='density')[2][f_keep]
                 # perform the bootstrap
@@ -354,10 +361,10 @@ def bootstrap_spectral2(data1, data2, fs, nperseg, fwin, nit=1000, ci=95,
         axis = 0)
     print('Number of Fourier coefficients: %d' % f_keep.sum())
     f = f[f_keep]
-    psd_segs1 = scipy.signal.spectral._spectral_helper(data1, data1, axis=-1,
+    psd_segs1 = scipy.signal._spectral_py._spectral_helper(data1, data1, axis=-1,
             nperseg = nperseg, fs=fs, mode='psd',
             scaling='density')[2][:,f_keep,:]
-    psd_segs2 = scipy.signal.spectral._spectral_helper(data2, data2,
+    psd_segs2 = scipy.signal._spectral_py._spectral_helper(data2, data2,
             axis=-1, nperseg = nperseg, fs=fs, mode='psd',
             scaling='density')[2][:,f_keep,:]
     # get the indices with replacement of the array for the bootstrap
@@ -379,7 +386,7 @@ def bootstrap_spectral2(data1, data2, fs, nperseg, fwin, nit=1000, ci=95,
         for i in range(nchans1):
             for j in range(nchans2):
                 print('Channel %d vs. %d.' % (i + 1, j + 1))
-                csd_segs = scipy.signal.spectral._spectral_helper(
+                csd_segs = scipy.signal._spectral_py._spectral_helper(
                 data1[i], data2[j], axis=-1, nperseg = nperseg, fs=fs,
                 mode='psd', scaling='density')[2][f_keep]
                 # perform the bootstrap
