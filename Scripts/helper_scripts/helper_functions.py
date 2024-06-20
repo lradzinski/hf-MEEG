@@ -1,7 +1,7 @@
 """
 helper_functions.py
 Gunnar Waterstraat
-Charite Neurophysics Group
+Charite Neurophysics Group, Berlin
 https://github.com/neurophysics/2021-hfMEG
 """
 
