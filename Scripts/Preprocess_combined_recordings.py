@@ -1,41 +1,44 @@
 # %%
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-import scipy
-import scipy.stats
-import meet
-import helper_scripts.helper_functions as helper_functions
-import matplotlib.mlab as mlab
-from scipy import signal as sig
-import tables
-
-plt.rcParams['figure.figsize'] = [12, 6]
-plt.rcParams["savefig.dpi"] = 600
+"""
+Preprocess_combined_recordings.py
+Lukasz Radzinski
+Charite Neurophysics Group, Berlin
+Script for preprocessing combined
+MEEG recordings 
+"""
 
 # %%
-# select subject
-# SMa - subject a with MEG data
-# SEb - subject b with EEG data
+import os
+import meet
+import scipy
+import tables
+import numpy as np
+import matplotlib.mlab as mlab
+import matplotlib.pyplot as plt
+from scipy import signal as sig
+import helper_scripts.helper_functions as helper_functions
+
+# set global parameters for plots
+plt.rcParams['figure.figsize'] = [12, 6]
+plt.rcParams['savefig.dpi'] = 600
+
+# %%
+# select subject [S1-S7]
 
 subject = 'S1'
-data_folder = '../Data'
-results_main_folder = '../Results'
+
+data_input_folder = '../Data/raw_data'
+data_output_folder = '../Data/cleaned_stim_data'
+plots_output_folder = '../Results'
 
 additional_plot_title = ''
 
-# use brownian noise to make a reference model
-if(subject.endswith('BN')):
-    use_brown_noise = True
-else:
-    use_brown_noise = False
+use_brown_noise = False
 
-if(use_brown_noise):
-    results_folder = os.path.join(results_main_folder, subject+'_MEEG_comb_brown_noise')
-    subject_name = subject+'_MEEG_comb_brown_noise'
-else:
-    results_folder = os.path.join(results_main_folder, subject+'_MEEG_comb')
-    subject_name = subject+'_MEEG_comb'
+subject_name = subject+'_MEEG_comb'
+data_input_folder = os.path.join(data_input_folder, subject)
+data_output_folder = os.path.join(data_output_folder, subject)
+plots_output_folder = os.path.join(plots_output_folder, subject, subject+'_MEEG_comb_preprocessing')
 
 meg_srate = 20000
 meg_unit = 'B [fT]'
@@ -45,55 +48,34 @@ eeg_srate = 10000
 eeg_unit = 'U [μV]'
 eeg_asd_unit = '[μV/√HZ]'
 
+# %%
+# load the data
+
 filename = '%s_MEG_comb_stim.dat' % subject
-raw_meg_data_stim = helper_functions.readMEG(os.path.join(data_folder, subject, filename), s_rate=meg_srate, num_chans=2)
-filename = '%s_MEG_comb_relax.dat' % subject
-raw_meg_data_relax = helper_functions.readMEG(os.path.join(data_folder, subject, filename), s_rate=meg_srate, num_chans=2)
+raw_meg_data_stim = helper_functions.readMEG(os.path.join(data_input_folder, filename), s_rate=meg_srate, num_chans=2)
+filename = '%s_MEG_comb_rest.dat' % subject
+raw_meg_data_rest = helper_functions.readMEG(os.path.join(data_input_folder, filename), s_rate=meg_srate, num_chans=2)
 
 filename = '%s_EEG_comb_stim.hdf5' % subject
-h5file_eeg_stim = tables.open_file(os.path.join(data_folder, subject, filename), mode="r", title="%s_eeg_stim" % subject)
+h5file_eeg_stim = tables.open_file(os.path.join(data_input_folder, filename), mode="r", title="%s_eeg_stim" % subject)
 raw_eeg_data_stim = np.array(h5file_eeg_stim.root.EEG_data).T
-filename = '%s_EEG_comb_relax.hdf5' % subject
-h5file_eeg_rest = tables.open_file(os.path.join(data_folder, subject, filename), mode="r", title="%s_eeg_rest" % subject)
-raw_eeg_data_relax = np.array(h5file_eeg_rest.root.EEG_data).T
-
-#raw_meg_data_emg = helper_functions.readMEG(filepath_emg+'.dat', s_rate=meg_srate, num_chans=2)
-#h5file_eeg_emg = tables.open_file(filepath_emg+'.hdf5', mode="r", title="%s_eeg_emg" % subject)
-#raw_eeg_data_emg = np.array(h5file_eeg_emg.root.EEG_data).T
-
-results_path = results_folder
+filename = '%s_EEG_comb_rest.hdf5' % subject
+h5file_eeg_rest = tables.open_file(os.path.join(data_input_folder, filename), mode="r", title="%s_eeg_rest" % subject)
+raw_eeg_data_rest = np.array(h5file_eeg_rest.root.EEG_data).T
 
 # %%
-def min_max_normalize_sig(signal):
+# extract the signals
 
-    signal_normalized = signal - np.min(signal)
-    signal_normalized /= np.max(signal_normalized)
-
-    return signal_normalized
-
-# %%
 MEG_data = -raw_meg_data_stim[:-1]
 MEG_stimulus_data = raw_meg_data_stim[-1]
-MEG_relax_data = -raw_meg_data_relax[:-1]
-#MEG_emg_data = -raw_meg_data_emg[:-1]
+MEG_rest_data = -raw_meg_data_rest[:-1]
 
 EEG_data = raw_eeg_data_stim[:-1, 40:]
 EEG_stimulus_data = raw_eeg_data_stim[-1][:-40]
-EEG_relax_data = raw_eeg_data_relax[:-1, 40:]
-#EEG_emg_data = raw_eeg_data_emg[:-1, 40:]
+EEG_rest_data = raw_eeg_data_rest[:-1, 40:]
 
 # %%
-'''
-if(use_brown_noise):
-    # use brownian noise as a reference model
-    import colorednoise as cn
-    if(measurement_type == 'EEG'):
-        XEG_data = 1000*cn.powerlaw_psd_gaussian(2, len(XEG_data))
-    else:
-        XEG_data = 10000*cn.powerlaw_psd_gaussian(2, len(XEG_data))
-'''
-
-# %%
+# add header to the plot function
 def plt_header(main_title='', use_suptitle = False, fontsize=12):
 
     title = 'Subject '+ subject
@@ -105,6 +87,7 @@ def plt_header(main_title='', use_suptitle = False, fontsize=12):
         plt.title(title, fontsize=fontsize)
 
 # %%
+# show and save the plot function
 def plt_show_save_fig(fig_name=None):
 
     if(fig_name):
@@ -114,11 +97,20 @@ def plt_show_save_fig(fig_name=None):
         fig_name = 'Fig%02d.png' % plt_show_save_fig.counter
 
     print('--------------------\n'+fig_name)
-    os.makedirs(results_path, exist_ok=True)
-    plt.savefig(os.path.join(results_path, fig_name), bbox_inches='tight')
+    os.makedirs(plots_output_folder, exist_ok=True)
+    plt.savefig(os.path.join(plots_output_folder, fig_name), bbox_inches='tight')
     plt.show()
 
 plt_show_save_fig.counter = 0
+
+# %%
+# normalize signal to 0-1 range
+def min_max_normalize_sig(signal):
+
+    signal_normalized = signal - np.min(signal)
+    signal_normalized /= np.max(signal_normalized)
+
+    return signal_normalized
 
 # %%
 # get the stimuli positions
@@ -131,6 +123,8 @@ marker_eeg = all_stimuli_eeg[10:-10]
 marker_eeg = marker_eeg[:len(marker_meg)]
 
 # %%
+# plot MEG and stimulus signals
+
 start_time = np.round(marker_meg[0]/meg_srate - 0.001, 5)
 end_time = np.round(marker_meg[0]/meg_srate + 0.001, 5)
 
@@ -153,6 +147,8 @@ plt.legend()
 plt_show_save_fig()
 
 # %%
+# plot EEG and stimulus signals
+
 start_time = np.round(marker_eeg[0]/eeg_srate - 0.001, 5)
 end_time = np.round(marker_eeg[0]/eeg_srate + 0.001, 5)
 
@@ -175,63 +171,65 @@ plt.legend()
 plt_show_save_fig()
 
 # %%
+# remove the stimuli
+
 interpolate_win_ms_meg = [-2, 3]
 interpolate_win_meg = np.round(np.array(interpolate_win_ms_meg) / 1000. * meg_srate).astype(int)
-MEG_preprocessed_data = meet.interpolateEEG(MEG_data.copy(), all_stimuli_meg, interpolate_win_meg)
+MEG_stimuli_removed_data = meet.interpolateEEG(MEG_data.copy(), all_stimuli_meg, interpolate_win_meg)
 
 interpolate_win_ms_eeg = [-5, 8]
 interpolate_win_eeg = np.round(np.array(interpolate_win_ms_eeg) / 1000. * eeg_srate).astype(int)
-EEG_preprocessed_data = meet.interpolateEEG(EEG_data.copy(), all_stimuli_eeg, interpolate_win_eeg)
+EEG_stimuli_removed_data = meet.interpolateEEG(EEG_data.copy(), all_stimuli_eeg, interpolate_win_eeg)
 
 # %%
+# plot MEG signal without stimuli
+
 data = MEG_data[0]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = MEG_preprocessed_data[0]
+data = MEG_stimuli_removed_data[0]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
-plt_header('Removing stimulus artifacts from MEG ch0 data')
+plt_header('Removing stimuli artifacts from MEG ch0 data')
 plt.xlabel('t [s]')
 plt.ylabel(meg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 data = MEG_data[0][:meg_srate]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = MEG_preprocessed_data[0][:meg_srate]
+data = MEG_stimuli_removed_data[0][:meg_srate]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
-plt_header('Removing stimulus artifacts from MEG ch0 data')
+plt_header('Removing stimuli artifacts from MEG ch0 data')
 plt.xlabel('t [s]')
 plt.ylabel(meg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 start_time = marker_meg[0]/meg_srate - 0.01 
 end_time = marker_meg[0]/meg_srate + 0.01
 
 data = MEG_data[0][int(start_time*meg_srate):int(end_time*meg_srate)]
 data_x = np.linspace(start_time*1000, end_time*1000, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = MEG_preprocessed_data[0][int(start_time*meg_srate):int(end_time*meg_srate)]
+data = MEG_stimuli_removed_data[0][int(start_time*meg_srate):int(end_time*meg_srate)]
 data_x = np.linspace(start_time*1000, end_time*1000, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
-plt_header('Removing stimulus artifacts from MEG ch0 data')
+plt_header('Removing stimuli artifacts from MEG ch0 data')
 plt.xlabel('t [ms]')
 plt.ylabel(meg_unit)
 plt.legend()
@@ -241,12 +239,12 @@ plt_show_save_fig()
 data = EEG_data[0]
 data_x = np.linspace(0, (len(data)-1)/eeg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = EEG_preprocessed_data[0]
+data = EEG_stimuli_removed_data[0]
 data_x = np.linspace(0, (len(data)-1)/eeg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
 plt_header('Removing stimuli artifacts from EEG ch0 data')
 plt.xlabel('t [s]')
@@ -254,38 +252,36 @@ plt.ylabel(eeg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 data = EEG_data[0][:eeg_srate]
 data_x = np.linspace(0, (len(data)-1)/eeg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = EEG_preprocessed_data[0][:eeg_srate]
+data = EEG_stimuli_removed_data[0][:eeg_srate]
 data_x = np.linspace(0, (len(data)-1)/eeg_srate, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
-plt_header('Removing stimulus artifacts from EEG ch0 data')
+plt_header('Removing stimuli artifacts from EEG ch0 data')
 plt.xlabel('t [s]')
 plt.ylabel(eeg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 start_time = marker_eeg[0]/eeg_srate - 0.01 
 end_time = marker_eeg[0]/eeg_srate + 0.01
 
 data = EEG_data[0][int(start_time*eeg_srate):int(end_time*eeg_srate)]
 data_x = np.linspace(start_time*1000, end_time*1000, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='raw signal')
+plt.plot(data_x, data_y, label='with stimulation artifacts')
 
-data = EEG_preprocessed_data[0][int(start_time*eeg_srate):int(end_time*eeg_srate)]
+data = EEG_stimuli_removed_data[0][int(start_time*eeg_srate):int(end_time*eeg_srate)]
 data_x = np.linspace(start_time*1000, end_time*1000, len(data))
 data_y = data
-plt.plot(data_x, data_y, label='preprocessed signal')
+plt.plot(data_x, data_y, label='without stimulation artifacts')
 
-plt_header('Removing stimulus artifacts from EEG ch0 data')
+plt_header('Removing stimuli artifacts from EEG ch0 data')
 plt.xlabel('t [ms]')
 plt.ylabel(eeg_unit)
 plt.legend()
@@ -294,14 +290,14 @@ plt_show_save_fig()
 # %%
 # apply fc=1Hz hp filter to remove DC component
 sos = sig.butter(2, 1, 'highpass', fs=meg_srate, output='sos')
-MEG_preprocessed_hp_data = sig.sosfiltfilt(sos, MEG_preprocessed_data)
+MEG_data = sig.sosfiltfilt(sos, MEG_stimuli_removed_data)
 
 # apply fc=1Hz hp filter to remove DC component
 sos = sig.butter(2, 1, 'highpass', fs=eeg_srate, output='sos')
-EEG_preprocessed_hp_data = sig.sosfiltfilt(sos, EEG_preprocessed_data)
+EEG_data = sig.sosfiltfilt(sos, EEG_stimuli_removed_data)
 
 # %%
-# amplitude spectral density
+# amplitude spectral density function
 def asd(data, nfft, srate):
 
     yf, xf = mlab.psd(x=data, NFFT=nfft, Fs=srate, window=sig.windows.hann(nfft), noverlap=nfft//2)
@@ -309,12 +305,14 @@ def asd(data, nfft, srate):
     return xf, np.sqrt(yf)
 
 # %%
+# calculate and plot amplitude spectral density of MEG
+
 plt_header('ASD of preprocessed MEG signal')
 
 nfft = 2**(int(np.log2(meg_srate))-2)
 
-for i in range(len(MEG_preprocessed_hp_data)):
-    data = MEG_preprocessed_hp_data[i]
+for i in range(len(MEG_data)):
+    data = MEG_data[i]
     xf2, yf2 = asd(data, nfft, meg_srate)
     plt.plot(xf2, yf2, label='ch%d' % i)
 
@@ -329,12 +327,14 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
+# calculate and plot amplitude spectral density of EEG
+
 plt_header('ASD of preprocessed EEG signal')
 
 nfft = 2**(int(np.log2(eeg_srate))-2)
 
-for i in range(len(EEG_preprocessed_hp_data)):
-    data = EEG_preprocessed_hp_data[i]
+for i in range(len(EEG_data)):
+    data = EEG_data[i]
     xf2, yf2 = asd(data, nfft, eeg_srate)
     plt.plot(xf2, yf2, label='ch%d' % i)
 
@@ -349,25 +349,28 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
-# apply 450Hz-850Hz band-pass filter for sigma band extraction and removing outliers
+# apply 450Hz-850Hz band-pass filter to extract
+# high-frequency band (sigma band) and 
+# high-frequency somatosensory evoked response (sigma burst)
+
 lfreq_sigma = 450
 rfreq_sigma = 850
 sigma_freq_range_str = '%sHz-%sHz' % (lfreq_sigma, rfreq_sigma)
 
-meg_sigma_band_data = meet.iir.butterworth(MEG_preprocessed_hp_data, fs=(lfreq_sigma-50, rfreq_sigma+50),
+meg_sigma_band_data = meet.iir.butterworth(MEG_data, fs=(lfreq_sigma-50, rfreq_sigma+50),
                                         fp=(lfreq_sigma, rfreq_sigma), s_rate=meg_srate)
 
-eeg_sigma_band_data = meet.iir.butterworth(EEG_preprocessed_hp_data, fs=(lfreq_sigma-50, rfreq_sigma+50),
+eeg_sigma_band_data = meet.iir.butterworth(EEG_data, fs=(lfreq_sigma-50, rfreq_sigma+50),
                                         fp=(lfreq_sigma, rfreq_sigma), s_rate=eeg_srate)
 
 # %%
-# extract meg trials to remove outliers
+# extract MEG trials to remove outliers
 
 whole_trial_len = int(np.round(np.mean(np.diff(all_stimuli_meg))))
 whole_trial_win_samples = [0,whole_trial_len]
 whole_trial_t = (np.arange(whole_trial_win_samples[0], whole_trial_win_samples[1], 1)/float(meg_srate)*1000)
 
-MEG_preprocessed_hp_whole_trials = meet.epochEEG(MEG_preprocessed_hp_data, marker_meg, whole_trial_win_samples)
+MEG_whole_trials = meet.epochEEG(MEG_data, marker_meg, whole_trial_win_samples)
 MEG_sigma_band_whole_trials = meet.epochEEG(meg_sigma_band_data, marker_meg, whole_trial_win_samples)
 
 sigma_win_ms = [10, 35]
@@ -375,11 +378,11 @@ sigma_win_samples = np.round(np.array(sigma_win_ms)/1000.*meg_srate).astype(int)
 MEG_sigma_burst_trials = meet.epochEEG(meg_sigma_band_data, marker_meg, sigma_win_samples)
 
 # %%
+# calculate MEG sigma band and sigma burst trials rms and percentiles to remove outliers
+
 not_outliers_meg = []
 thresholds_sigma_band_rms_meg = []
 thresholds_sigma_burst_rms_meg = []
-
-# calculate sigma band whole trials rms and percentiles to remove outliers
 
 for i in range(len(MEG_sigma_band_whole_trials)):
 
@@ -411,7 +414,6 @@ for i in range(len(MEG_sigma_band_whole_trials)):
 
 not_outliers_meg = np.mean(not_outliers_meg, axis=0) > 0.5
 
-# %%
 prop_cycle = plt.rcParams['axes.prop_cycle']
 colors = prop_cycle.by_key()['color']
 
@@ -428,7 +430,6 @@ plt.ylabel(meg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 prop_cycle = plt.rcParams['axes.prop_cycle']
 colors = prop_cycle.by_key()['color']
 
@@ -445,7 +446,6 @@ plt.ylabel(meg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 plt_header('MEG outliers rejection')
 plt.plot(not_outliers_meg, linewidth=1, label='MEG, n=%d' % np.sum(not_outliers_meg == False))
 plt.xlabel('trial number')
@@ -454,13 +454,13 @@ plt.legend()
 plt_show_save_fig()
 
 # %%
-# extract eeg trials to remove outliers
+# extract EEG trials to remove outliers
 
 whole_trial_len = int(np.round(np.mean(np.diff(all_stimuli_eeg))))
 whole_trial_win_samples = [0,whole_trial_len]
 whole_trial_t = (np.arange(whole_trial_win_samples[0], whole_trial_win_samples[1], 1)/float(eeg_srate)*1000)
 
-EEG_preprocessed_hp_whole_trials = meet.epochEEG(EEG_preprocessed_hp_data, marker_eeg, whole_trial_win_samples)
+EEG_whole_trials = meet.epochEEG(EEG_data, marker_eeg, whole_trial_win_samples)
 EEG_sigma_band_whole_trials = meet.epochEEG(eeg_sigma_band_data, marker_eeg, whole_trial_win_samples)
 
 sigma_win_ms = [10, 35]
@@ -468,6 +468,8 @@ sigma_win_samples = np.round(np.array(sigma_win_ms)/1000.*eeg_srate).astype(int)
 EEG_sigma_burst_trials = meet.epochEEG(eeg_sigma_band_data, marker_eeg, sigma_win_samples)
 
 # %%
+# calculate EEG sigma band and sigma burst trials rms and percentiles to remove outliers
+
 not_outliers_eeg = []
 thresholds_sigma_band_rms_eeg = []
 thresholds_sigma_burst_rms_eeg = []
@@ -504,7 +506,6 @@ for i in range(len(EEG_sigma_band_whole_trials)):
 
 not_outliers_eeg = np.mean(not_outliers_eeg, axis=0) > 0.5
 
-# %%
 prop_cycle = plt.rcParams['axes.prop_cycle']
 colors = prop_cycle.by_key()['color']
 
@@ -521,7 +522,6 @@ plt.ylabel(eeg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 prop_cycle = plt.rcParams['axes.prop_cycle']
 colors = prop_cycle.by_key()['color']
 
@@ -538,7 +538,6 @@ plt.ylabel(eeg_unit)
 plt.legend()
 plt_show_save_fig()
 
-# %%
 plt_header('MEG and EEG outliers rejection')
 plt.plot(not_outliers_meg, linewidth=1, label='MEG, n=%d' % np.sum(not_outliers_meg == False))
 plt.plot(not_outliers_eeg, linewidth=1, label='EEG, n=%d' % np.sum(not_outliers_eeg == False))
@@ -548,11 +547,12 @@ plt.legend()
 plt_show_save_fig()
 
 # %%
+# final outliers estimation
+
 not_outliers = not_outliers_meg*not_outliers_eeg
 not_outliers = np.convolve(not_outliers, np.ones(5)/5, mode='same')
 not_outliers = (not_outliers > 0.999)
 
-# %%
 not_outliers_arr = []
 temp_arr = []
 
@@ -571,7 +571,6 @@ for i in range(len(not_outliers_arr)):
     if(len(not_outliers_arr[i]) < 20):
         not_outliers[not_outliers_arr[i]] = False
 
-# %%
 plt_header('Final outliers rejection, trials rejected = %d, trials remained = %d' % (np.sum(not_outliers == False), np.sum(not_outliers)))
 plt.plot(not_outliers)
 plt.xlabel('trial number')
@@ -579,44 +578,49 @@ plt.ylabel('not outlier')
 plt_show_save_fig()
 
 # %%
-MEG_preprocessed_hp_whole_trials = MEG_preprocessed_hp_whole_trials[:,:,not_outliers]
+# reject outliers
+
+MEG_whole_trials = MEG_whole_trials[:,:,not_outliers]
 MEG_sigma_band_whole_trials = MEG_sigma_band_whole_trials[:,:,not_outliers]
 MEG_sigma_burst_trials = MEG_sigma_burst_trials[:,:,not_outliers]
 
-EEG_preprocessed_hp_whole_trials = EEG_preprocessed_hp_whole_trials[:,:,not_outliers]
+EEG_whole_trials = EEG_whole_trials[:,:,not_outliers]
 EEG_sigma_band_whole_trials = EEG_sigma_band_whole_trials[:,:,not_outliers]
 EEG_sigma_burst_trials = EEG_sigma_burst_trials[:,:,not_outliers]
 
-# %%
-print(MEG_preprocessed_hp_whole_trials.shape)
+print(MEG_whole_trials.shape)
 print(MEG_sigma_band_whole_trials.shape)
 print(MEG_sigma_burst_trials.shape)
 
-print(EEG_preprocessed_hp_whole_trials.shape)
+print(EEG_whole_trials.shape)
 print(EEG_sigma_band_whole_trials.shape)
 print(EEG_sigma_burst_trials.shape)
 
 # %%
-MEG_preprocessed_hp_data_no_outliers = np.concatenate(MEG_preprocessed_hp_whole_trials.T).T
-meg_all_stimuli_no_outliers = (np.arange(MEG_preprocessed_hp_whole_trials.shape[-1])*MEG_preprocessed_hp_whole_trials.shape[-2])
-meg_marker_no_outliers = meg_all_stimuli_no_outliers[1:]
-MEG_preprocessed_hp_data_no_outliers = meet.interpolateEEG(MEG_preprocessed_hp_data_no_outliers, meg_marker_no_outliers, interpolate_win_meg)
+# concatenate trials without outliers
 
-EEG_preprocessed_hp_data_no_outliers = np.concatenate(EEG_preprocessed_hp_whole_trials.T).T
-eeg_all_stimuli_no_outliers = (np.arange(EEG_preprocessed_hp_whole_trials.shape[-1])*EEG_preprocessed_hp_whole_trials.shape[-2])
+MEG_data_no_outliers = np.concatenate(MEG_whole_trials.T).T
+meg_all_stimuli_no_outliers = (np.arange(MEG_whole_trials.shape[-1])*MEG_whole_trials.shape[-2])
+meg_marker_no_outliers = meg_all_stimuli_no_outliers[1:]
+MEG_data_no_outliers = meet.interpolateEEG(MEG_data_no_outliers, meg_marker_no_outliers, interpolate_win_meg)
+
+EEG_data_no_outliers = np.concatenate(EEG_whole_trials.T).T
+eeg_all_stimuli_no_outliers = (np.arange(EEG_whole_trials.shape[-1])*EEG_whole_trials.shape[-2])
 eeg_marker_no_outliers = eeg_all_stimuli_no_outliers[1:]
-EEG_preprocessed_hp_data_no_outliers = meet.interpolateEEG(EEG_preprocessed_hp_data_no_outliers, eeg_marker_no_outliers, interpolate_win_eeg)
+EEG_data_no_outliers = meet.interpolateEEG(EEG_data_no_outliers, eeg_marker_no_outliers, interpolate_win_eeg)
 
 # %%
+# plot asd of MEG data with outliers removed
+
 plt_header('ASD of preprocessed MEG signal')
 
 nfft = 2**(int(np.log2(meg_srate))-2)
 
-data = MEG_preprocessed_hp_data[0]
+data = MEG_data[0]
 xf2, yf2 = asd(data, nfft, meg_srate)
 plt.plot(xf2, yf2, label='ch0 with outliers')
 
-data = MEG_preprocessed_hp_data_no_outliers[0]
+data = MEG_data_no_outliers[0]
 xf2, yf2 = asd(data, nfft, meg_srate)
 plt.plot(xf2, yf2, label='ch0 outliers removed')
 
@@ -631,12 +635,14 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
+# plot asd of EEG data with outliers removed
+
 plt_header('ASD of preprocessed EEG signal, outliers removed')
 
 nfft = 2**(int(np.log2(eeg_srate))-2)
 
-for i in range(len(EEG_preprocessed_hp_data_no_outliers)):
-    data = EEG_preprocessed_hp_data_no_outliers[i]
+for i in range(len(EEG_data_no_outliers)):
+    data = EEG_data_no_outliers[i]
     xf2, yf2 = asd(data, nfft, eeg_srate)
     plt.plot(xf2, yf2, label='channel %d' % i)
 
@@ -651,22 +657,26 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
-MEG_preprocessed_hp_data = MEG_preprocessed_hp_data_no_outliers
+# use trials without outliers as default
+
+MEG_data = MEG_data_no_outliers
 all_stimuli_meg = meg_all_stimuli_no_outliers
 marker_meg = meg_marker_no_outliers
 
-EEG_preprocessed_hp_data = EEG_preprocessed_hp_data_no_outliers
+EEG_data = EEG_data_no_outliers
 all_stimuli_eeg = eeg_all_stimuli_no_outliers
 marker_eeg = eeg_marker_no_outliers
 
 # %%
-MEG_trials_averaged = np.mean(MEG_preprocessed_hp_whole_trials, axis=-1)
+# plot MEG broadband evoked response
+
+MEG_trials_averaged = np.mean(MEG_whole_trials, axis=-1)
 
 data = MEG_trials_averaged[0]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))*1000
 data_y = data
 plt.plot(data_x, data_y)
-plt_header('MEG ch0 average of broadband trials, n = %d' % len(MEG_preprocessed_hp_whole_trials.T))
+plt_header('MEG ch0 average of broadband trials, n = %d' % len(MEG_whole_trials.T))
 plt.xlabel('t [ms]')
 plt.ylabel(meg_unit)
 plt.ylim((-600, 600))
@@ -676,13 +686,15 @@ data = MEG_trials_averaged[0][:meg_srate//10]
 data_x = np.linspace(0, (len(data)-1)/meg_srate, len(data))*1000
 data_y = data
 plt.plot(data_x, data_y)
-plt_header('MEG ch0 average of broadband trials, n = %d' % len(MEG_preprocessed_hp_whole_trials.T))
+plt_header('MEG ch0 average of broadband trials, n = %d' % len(MEG_whole_trials.T))
 plt.xlabel('t [ms]')
 plt.ylabel(meg_unit)
 plt.ylim((-600, 600))
 plt_show_save_fig()
 
 # %%
+# plot MEG sigma burst (high-frequency somatosensory evoked response)
+
 MEG_sigma_band_trials_averaged = np.mean(MEG_sigma_band_whole_trials, axis=-1)
 
 data = MEG_sigma_band_trials_averaged[0]
@@ -706,33 +718,37 @@ plt.ylim((-25, 25))
 plt_show_save_fig()
 
 # %%
+# plot sigma burst single trials stack on each other
+
 plt.rcParams['image.cmap'] = 'coolwarm'
 
 plt_header('MEG ch0 sigma burst, all trials')
 data = MEG_sigma_band_whole_trials[0][:meg_srate//10,]
 data_x = np.linspace(0, 1000*(len(data)-1)/meg_srate, len(data))
-plt.pcolormesh(data_x, np.arange(len(data.T)), data.T, vmin=-25, vmax=25)
+plt.pcolormesh(data_x, np.arange(len(data.T)), data.T, vmin=-30, vmax=30)
 plt.ylabel('Trial number')
 plt.xlabel('Time [s]')
-clb = plt.colorbar()
+clb = plt.colorbar(extend='both')
 clb.set_label(meg_unit)
 plt_show_save_fig()
 
-start_trial = 900
-end_trial = 1101
+start_trial = 400
+end_trial = 600
 plt_header('MEG ch0 sigma burst, exemplary trials')
-data = MEG_sigma_band_whole_trials[0][:meg_srate//10,start_trial:end_trial]
+data = MEG_sigma_band_whole_trials[0][:meg_srate//10,start_trial:end_trial+1]
 data_x = np.linspace(0, 1000*(len(data)-1)/meg_srate, len(data))
 
-plt.pcolormesh(data_x, np.arange(start_trial, end_trial), data.T, vmin=-25, vmax=25)
+plt.pcolormesh(data_x, np.arange(start_trial, end_trial+1), data.T, vmin=-30, vmax=30)
 plt.ylabel('Trial number')
 plt.xlabel('Time [s]')
-clb = plt.colorbar()
+clb = plt.colorbar(extend='both')
 clb.set_label(meg_unit)
 plt_show_save_fig()
 
 # %%
-EEG_trials_averaged = np.mean(EEG_preprocessed_hp_whole_trials, axis=-1)
+# plot EEG and MEG broadband evoked response
+
+EEG_trials_averaged = np.mean(EEG_whole_trials, axis=-1)
 
 fig, axs = plt.subplots(3, 3, figsize=(16, 9))
 plt_header('Average of broadband trials', use_suptitle=True, fontsize=14)
@@ -774,6 +790,8 @@ fig.tight_layout()
 plt_show_save_fig()
 
 # %%
+# plot EEG and MEG sigma burst (high-frequency somatosensory evoked response)
+
 EEG_sigma_band_trials_averaged = np.mean(EEG_sigma_band_whole_trials, axis=-1)
 
 fig, axs = plt.subplots(3, 3, figsize=(16, 9))
@@ -816,14 +834,16 @@ fig.tight_layout()
 plt_show_save_fig()
 
 # %%
-stimulus_meg_new = np.zeros(MEG_preprocessed_hp_data.shape[-1])
-stimulus_meg_new[marker_meg] = 1.0
-meg_out_data = np.concatenate((MEG_preprocessed_hp_data, [stimulus_meg_new]))
-np.save(os.path.join(results_path, subject+'_meg_cleaned_data.npy'), meg_out_data)
+# save the preprocessed data
 
-stimulus_eeg_new = np.zeros(EEG_preprocessed_hp_data.shape[-1])
+stimulus_meg_new = np.zeros(MEG_data.shape[-1])
+stimulus_meg_new[marker_meg] = 1.0
+meg_out_data = np.concatenate((MEG_data, [stimulus_meg_new]))
+np.save(os.path.join(data_output_folder, subject+'_MEG_comb_cleaned_data.npy'), meg_out_data)
+
+stimulus_eeg_new = np.zeros(EEG_data.shape[-1])
 stimulus_eeg_new[marker_eeg] = 1.0
-eeg_out_data = np.concatenate((EEG_preprocessed_hp_data, [stimulus_eeg_new]))
-np.save(os.path.join(results_path, subject+'_eeg_cleaned_data.npy'), eeg_out_data)
+eeg_out_data = np.concatenate((EEG_data, [stimulus_eeg_new]))
+np.save(os.path.join(data_output_folder, subject+'_EEG_comb_cleaned_data.npy'), eeg_out_data)
 
 
