@@ -1,6 +1,6 @@
 # %%
 """
-Preprocess_combined_recordings.py
+Preprocess_combined_recordings.ipynb
 Lukasz Radzinski
 Charite Neurophysics Group, Berlin
 Script for preprocessing combined
@@ -78,7 +78,7 @@ EEG_rest_data = raw_eeg_data_rest[:-1, 40:]
 # add header to the plot function
 def plt_header(main_title='', use_suptitle = False, fontsize=12):
 
-    title = 'Subject '+ subject
+    title = 'Subject '+ subject_name
     title += '\n'+main_title+additional_plot_title
 
     if(use_suptitle):
@@ -306,15 +306,24 @@ def asd(data, nfft, srate):
 
 # %%
 # calculate and plot amplitude spectral density of MEG
+# detect peaks in spectrum to remove
 
 plt_header('ASD of preprocessed MEG signal')
+peaks_to_remove = [] # freqs [Hz]
 
 nfft = 2**(int(np.log2(meg_srate))-2)
 
 for i in range(len(MEG_data)):
     data = MEG_data[i]
-    xf2, yf2 = asd(data, nfft, meg_srate)
-    plt.plot(xf2, yf2, label='ch%d' % i)
+    xf, yf = asd(data, nfft, meg_srate)
+    plt.plot(xf, yf, label='ch%d' % i)
+
+    yf_norm = np.log10(yf)
+    yf_norm = yf_norm - np.mean(yf_norm)
+    yf_norm = yf_norm / np.std(yf_norm)
+    asd_peaks = sig.find_peaks(yf_norm, prominence=2)[0]
+    peaks_to_remove.append(xf[asd_peaks])
+    plt.scatter(xf[asd_peaks], yf[asd_peaks], marker='x', color='red', label='peaks to remove')
 
 plt.xscale('log')
 plt.yscale('log')
@@ -327,6 +336,60 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
+# remove peaks from the MEG signal
+
+MEG_data_freq_peaks_removed = MEG_data.copy()
+
+for n in range(len(peaks_to_remove)):
+
+    if(len(peaks_to_remove[n]) > 0):
+
+        import mne
+        info = mne.create_info(ch_names=['ch1'], sfreq=meg_srate, ch_types=['mag'])
+        raw = mne.io.RawArray([MEG_data_freq_peaks_removed[n]], info)
+
+        # second filtering round
+        raw = raw.notch_filter(freqs=peaks_to_remove[n], method="spectrum_fit")
+        MEG_data_freq_peaks_removed[n] = raw['ch1'][0][0]
+
+        # reinterpolate the stimulus to remove filtering artifacts
+        MEG_data_freq_peaks_removed[n] = meet.interpolateEEG(MEG_data_freq_peaks_removed[n], marker_meg, interpolate_win_meg)
+
+        # apply low-pass filter to remove potential artifact near Nyquist freqency
+        sos = sig.butter(2, meg_srate//2-100, 'lowpass', fs=meg_srate, output='sos')
+        MEG_data_freq_peaks_removed[n] = sig.sosfiltfilt(sos, MEG_data_freq_peaks_removed[n])
+
+
+# %%
+# calculate and plot amplitude spectral density of MEG
+
+plt_header('ASD of preprocessed MEG signal, removing peaks artifacts')
+peaks_to_remove = [] # freqs [Hz]
+
+nfft = 2**(int(np.log2(meg_srate))-2)
+
+for i in range(len(MEG_data)):
+    data = MEG_data[i]
+    xf, yf = asd(data, nfft, meg_srate)
+    plt.plot(xf, yf, label='ch%d, with peaks' % i)
+
+    data = MEG_data_freq_peaks_removed[i]
+    xf, yf = asd(data, nfft, meg_srate)
+    plt.plot(xf, yf, label='ch%d, peaks removed' % i)
+
+plt.xscale('log')
+plt.yscale('log')
+plt.xlim((1,meg_srate//2))
+plt.ylim((0.1, 1000))
+plt.xlabel('f [Hz]')
+plt.ylabel('Amplitude Spectral Density %s' % meg_asd_unit)
+plt.legend()
+plt.grid(True)
+plt_show_save_fig()
+
+MEG_data = MEG_data_freq_peaks_removed
+
+# %%
 # calculate and plot amplitude spectral density of EEG
 
 plt_header('ASD of preprocessed EEG signal')
@@ -335,8 +398,8 @@ nfft = 2**(int(np.log2(eeg_srate))-2)
 
 for i in range(len(EEG_data)):
     data = EEG_data[i]
-    xf2, yf2 = asd(data, nfft, eeg_srate)
-    plt.plot(xf2, yf2, label='ch%d' % i)
+    xf, yf = asd(data, nfft, eeg_srate)
+    plt.plot(xf, yf, label='ch%d' % i)
 
 plt.xscale('log')
 plt.yscale('log')
@@ -617,12 +680,12 @@ plt_header('ASD of preprocessed MEG signal')
 nfft = 2**(int(np.log2(meg_srate))-2)
 
 data = MEG_data[0]
-xf2, yf2 = asd(data, nfft, meg_srate)
-plt.plot(xf2, yf2, label='ch0 with outliers')
+xf, yf = asd(data, nfft, meg_srate)
+plt.plot(xf, yf, label='ch0 with outliers')
 
 data = MEG_data_no_outliers[0]
-xf2, yf2 = asd(data, nfft, meg_srate)
-plt.plot(xf2, yf2, label='ch0 outliers removed')
+xf, yf = asd(data, nfft, meg_srate)
+plt.plot(xf, yf, label='ch0 outliers removed')
 
 plt.xscale('log')
 plt.yscale('log')
@@ -643,8 +706,8 @@ nfft = 2**(int(np.log2(eeg_srate))-2)
 
 for i in range(len(EEG_data_no_outliers)):
     data = EEG_data_no_outliers[i]
-    xf2, yf2 = asd(data, nfft, eeg_srate)
-    plt.plot(xf2, yf2, label='channel %d' % i)
+    xf, yf = asd(data, nfft, eeg_srate)
+    plt.plot(xf, yf, label='channel %d' % i)
 
 plt.xscale('log')
 plt.yscale('log')
