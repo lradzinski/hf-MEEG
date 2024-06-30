@@ -1,6 +1,6 @@
 # %%
 """
-Preprocess_separate_recordings.py
+Preprocess_single_channel_recordings.py
 Lukasz Radzinski
 Charite Neurophysics Group, Berlin
 Script for preprocessing single channel,
@@ -9,6 +9,7 @@ separate MEG/EEG recordings
 
 # %%
 import os
+import sys
 import meet
 import scipy
 import tables
@@ -23,33 +24,39 @@ plt.rcParams['figure.figsize'] = [12, 6]
 plt.rcParams['savefig.dpi'] = 600
 
 # %%
-# select subject [S0-S7] and measurement type [MEG, EEG]
-# S0 is a dummy subject with generated brownian noise signal
+# select subject [S1-S7] and measurement type [MEG, EEG]
 
-subject = 'S1'
-measurement_type = 'MEG'
-
-data_input_folder = '../Data/raw_data'
-data_output_folder = '../Data/cleaned_stim_data'
-plots_output_folder = '../Results'
-
+filename = 'S1_MEG_only_sc_stim'
+date = '2018-03-19'
+#date = '2023-11-15'
+#date = '2024-06-25'
 additional_plot_title = ''
 
-if(subject == 'S0'):
-    use_brown_noise = True
-else:
-    use_brown_noise = False
+filename_splitted = filename.split('_')
+subject = filename_splitted[0]
+measurement_type = filename_splitted[1]
 
-if(use_brown_noise):
-    subject_name = subject+'_'+measurement_type+'_brown_noise'
-    data_input_folder = os.path.join(data_input_folder, 'S1')
-    data_output_folder = os.path.join(data_output_folder, subject)
-    plots_output_folder = os.path.join(plots_output_folder, subject, subject+'_brown_noise_preprocessing')
-else:
-    subject_name = subject+'_'+measurement_type+'_only'
-    data_input_folder = os.path.join(data_input_folder, subject)
-    data_output_folder = os.path.join(data_output_folder, subject)
-    plots_output_folder = os.path.join(plots_output_folder, subject, subject+'_'+measurement_type+'_only_preprocessing')
+if(filename_splitted[2] == 'comb'):
+    combined_MEEG = True
+elif(filename_splitted[2] == 'only'):
+    combined_MEEG = False
+
+if(filename_splitted[3] == 'mc'):
+    multichannel = True
+elif(filename_splitted[3] == 'sc'):
+    multichannel = False
+
+recording_condition = filename_splitted[4]
+
+data_input_folder = '../Data/raw_data'
+data_output_folder = '../Data/cleaned_data'
+plots_output_folder = '../Results'
+
+use_brown_noise = False
+
+data_input_folder = os.path.join(data_input_folder, date, subject)
+data_output_folder = os.path.join(data_output_folder, date, subject)
+plots_output_folder = os.path.join(plots_output_folder, subject, 'preprocessing', date+'_'+filename)
 
 if(measurement_type == 'MEG'):
     srate = 20000
@@ -60,46 +67,34 @@ elif(measurement_type == 'EEG'):
     unit = 'U [μV]'
     asd_unit = '[μV/√HZ]'
 
+if(multichannel):
+    sys.exit(0)
+
 # %%
 # load the data
 
-if(use_brown_noise):
-    filename = 'S1_MEG_only_stim.dat'
-    raw_data_stim = helper_functions.readMEG(os.path.join(data_input_folder, filename), s_rate=srate, num_chans=2)
-    raw_data_rest = []
-elif(measurement_type == 'MEG'):
-    filename = '%s_MEG_only_stim.dat' % subject
-    raw_data_stim = helper_functions.readMEG(os.path.join(data_input_folder, filename), s_rate=srate, num_chans=2)
-    filename = '%s_MEG_only_rest.dat' % subject
-    raw_data_rest = helper_functions.readMEG(os.path.join(data_input_folder, filename), s_rate=srate, num_chans=2)
+if(measurement_type == 'MEG'):
+    raw_data = helper_functions.readMEG(os.path.join(data_input_folder, filename+'.dat'), s_rate=srate, num_chans=2)
 elif(measurement_type == 'EEG'):
-    filename = '%s_EEG_only_stim.hdf5' % subject
-    h5file_eeg_stim = tables.open_file(os.path.join(data_input_folder, filename), mode="r", title="%s_eeg_stim" % subject)
-    raw_data_stim = np.array(h5file_eeg_stim.root.EEG_data).T
-    filename = '%s_EEG_only_rest.hdf5' % subject
-    h5file_eeg_rest = tables.open_file(os.path.join(data_input_folder, filename), mode="r", title="%s_eeg_rest" % subject)
-    raw_data_rest = np.array(h5file_eeg_rest.root.EEG_data).T
+    h5file_eeg_stim = tables.open_file(os.path.join(data_input_folder, filename+'.hdf5'), mode="r", title="%s_eeg_stim" % subject)
+    raw_data = np.array(h5file_eeg_stim.root.EEG_data).T
 
 # %%
 # extract the signals
-
 if(measurement_type == 'MEG'):
     # change polarity of the MEG data to
     # make it consistent with the EEG data
-    XEG_raw_data = -raw_data_stim[0]
-    stimulus_data = raw_data_stim[-1]
-    XEG_rest_raw_data = raw_data_rest[0]
+    XEG_raw_data = -raw_data[0]
+    stimulus_data = raw_data[-1]
 elif(measurement_type == 'EEG'):
     # remove first 5 seconds and use the offset
     # to align the EEG data to the stimulus
-    offset = 38
-    XEG_raw_data = raw_data_stim[0][5*srate+offset:]
-    stimulus_data = raw_data_stim[-1][5*srate:-offset]
-    XEG_rest_raw_data = raw_data_rest[0][5*srate:]
+    offset = 40
+    XEG_raw_data = raw_data[0][5*srate+offset:]
+    stimulus_data = raw_data[-1][5*srate:-offset]
 
 # %%
 # using brownian noise as a test reference
-
 if(use_brown_noise):
     import colorednoise as cn
     if(measurement_type == 'MEG'):
@@ -109,17 +104,15 @@ if(use_brown_noise):
 
 # %%
 # add header to the plot function
-
 def plt_header(main_title=''):
 
-    title = subject_name
+    title = filename+', '+date
     title += '\n'+main_title+additional_plot_title
 
     plt.title(title)
 
 # %%
 # show and save the plot function
-
 def plt_show_save_fig(fig_name=None):
 
     if(fig_name):
@@ -198,8 +191,12 @@ plt_show_save_fig()
 
 # %%
 # get the stimuli positions
-
-if(measurement_type == 'MEG'):
+if(recording_condition != 'stim'):
+    trial_len = int(srate/1)
+    number_of_trials = int(len(XEG_raw_data)/trial_len)
+    all_stimuli = np.arange(number_of_trials)*trial_len
+    all_stimuli = all_stimuli[1:]
+elif(measurement_type == 'MEG'):
     all_stimuli = ((stimulus_data[1:]>250000) & (stimulus_data[:-1]<250000)).nonzero()[0]
 elif(measurement_type == 'EEG'):
     all_stimuli = ((stimulus_data[1:]>0.5) & (stimulus_data[:-1]<0.5)).nonzero()[0]
@@ -278,7 +275,6 @@ plt_show_save_fig()
 
 sos = sig.butter(2, 1, 'highpass', fs=srate, output='sos')
 XEG_data = sig.sosfiltfilt(sos, XEG_stimuli_removed_data)
-XEG_rest_data = sig.sosfiltfilt(sos, XEG_rest_raw_data)
 
 # %%
 # plot signal without DC component
@@ -303,42 +299,35 @@ def asd(data, nfft):
     return xf, np.sqrt(yf)
 
 # %%
-# calculate and plot amplitude spectral density
-
-nfft = 2**(int(np.log2(srate))-2)
+# plot asd of signal after removing stimulus
 
 data = XEG_data
+nfft = 2**(int(np.log2(srate))-2)
 xf, yf = asd(data, nfft)
-plt.plot(xf, yf, label='stimulation, t=%ds' % (len(data)//srate))
 
-data = XEG_rest_data
-xf, yf = asd(data, nfft)
-plt.plot(xf, yf, label='resting, t=%ds' % (len(data)//srate))
+plt_header('Cleaning %s signal, stimulus removed' % measurement_type)
+plt.plot(xf, yf)
 
-
-plt_header('ASD of %s signal for different conditions' % measurement_type)
 plt.xscale('log')
 plt.yscale('log')
 plt.xlim((1,srate//2))
-plt.ylim((1e-3,10))
-plt.xlabel('f [Hz]')
-plt.ylabel('Amplitude Spectral Density %s' % asd_unit)
-plt.legend()
-plt.grid(True)
 if(measurement_type == 'EEG'):
     plt.ylim((0.001, 10))
 else:
     plt.ylim((0.1, 1000))
+plt.xlabel('f [Hz]')
+plt.ylabel('Amplitude Spectral Density %s' % asd_unit)
+plt.grid(True)
 plt_show_save_fig()
 
 # %%
-# remove powerline artifacts
+# remove powerline artifacts / spectrum peaks
 
-XEG_with_50Hz_data = XEG_data
+XEG_with_spectrum_peaks = XEG_data
 
-# for EEG data apply notch filter to remove powerline artifacts
-if(measurement_type == 'EEG'):
+if(date == '2023-11-15'):
 
+    # apply notch filter to remove powerline artifacts
     import mne
     info = mne.create_info(ch_names=['ch1'], sfreq=srate, ch_types=['eeg'])
     raw = mne.io.RawArray([XEG_data], info)
@@ -348,6 +337,7 @@ if(measurement_type == 'EEG'):
     for i in range(50):
         powerline_freqs.append((2*i+1)*50)
     raw = raw.notch_filter(freqs=powerline_freqs, method="spectrum_fit")
+    peaks_to_remove = powerline_freqs
 
     # second filtering round
     powerline_freqs = []
@@ -359,27 +349,58 @@ if(measurement_type == 'EEG'):
     # reinterpolate the stimulus to remove filtering artifacts
     XEG_data = meet.interpolateEEG(XEG_data, marker, interpolate_win)
 
-# %%
-# plot asd of signal without powerline artifacts
+else:
 
-data = XEG_with_50Hz_data
+    # detect peaks in the spectrum
+    nfft = 2**(int(np.log2(srate))-2)
+    data = XEG_data
+    xf, yf = asd(data, nfft)
+
+    yf_norm = np.log10(yf)
+    yf_norm = yf_norm - np.mean(yf_norm)
+    yf_norm = yf_norm / np.std(yf_norm)
+    asd_peaks = sig.find_peaks(yf_norm, prominence=2)[0]
+    peaks_to_remove = xf[asd_peaks]
+
+    if(len(peaks_to_remove) > 0):
+
+        import mne
+        info = mne.create_info(ch_names=['ch1'], sfreq=srate, ch_types=['eeg'])
+        raw = mne.io.RawArray([XEG_data], info)
+
+        # filtering
+        raw = raw.notch_filter(freqs=peaks_to_remove, method="spectrum_fit")
+        XEG_data = raw['ch1'][0][0]
+
+        # reinterpolate the stimulus to remove filtering artifacts
+        XEG_data = meet.interpolateEEG(XEG_data, marker, interpolate_win)
+
+        # apply low-pass filter to remove potential artifact near Nyquist freqency
+        sos = sig.butter(2, srate//2-100, 'lowpass', fs=srate, output='sos')
+        XEG_data = sig.sosfiltfilt(sos, XEG_data)
+
+# %%
+# plot asd of signal without powerline artifacts / spectrum peaks
+
+data = XEG_with_spectrum_peaks
 nfft = 2**(int(np.log2(srate))-2)
 xf, yf = asd(data, nfft)
 
-plt_header('Cleaning %s signal, removing powerline artifacts' % measurement_type)
-plt.plot(xf, yf, label='with powerline artifacts')
+plt_header('Cleaning %s signal, removing powerline artifacts / spectrum peaks' % measurement_type)
+plt.scatter(xf[asd_peaks], yf[asd_peaks], marker='x', color='red', label='peaks to remove')
+plt.plot(xf, yf, label='with artifacts')
 
 data = XEG_data
 xf, yf = asd(data, nfft)
 
-plt.plot(xf, yf, label='powerline artifacts removed')
+plt.plot(xf, yf, label='artifacts removed')
 plt.xscale('log')
 plt.yscale('log')
 plt.xlim((1,srate//2))
 if(measurement_type == 'EEG'):
-    plt.ylim((0.001, 5))
+    plt.ylim((0.001, 10))
 else:
-    plt.ylim((0.1, 500))
+    plt.ylim((0.1, 1000))
 plt.xlabel('f [Hz]')
 plt.ylabel('Amplitude Spectral Density %s' % asd_unit)
 plt.legend()
@@ -406,7 +427,7 @@ whole_trial_win_samples = [0,whole_trial_len]
 whole_trial_t = (np.arange(whole_trial_win_samples[0], whole_trial_win_samples[1], 1)/float(srate)*1000)
 
 XEG_whole_trials = meet.epochEEG(XEG_data, marker, whole_trial_win_samples)
-XEG_with_50Hz_whole_trials = meet.epochEEG(XEG_with_50Hz_data, marker, whole_trial_win_samples)
+XEG_with_spectrum_peaks_whole_trials = meet.epochEEG(XEG_with_spectrum_peaks, marker, whole_trial_win_samples)
 sigma_band_whole_trials = meet.epochEEG(sigma_band_data, marker, whole_trial_win_samples)
 
 sigma_win_ms = [10, 35]
@@ -415,7 +436,6 @@ sigma_burst_trials = meet.epochEEG(sigma_band_data, marker, sigma_win_samples)
 
 # %%
 # calculate sigma band whole trials rms and percentiles to remove outliers
-
 sigma_band_trials_rms = np.sqrt(np.mean(sigma_band_whole_trials**2, axis=0))
 
 sigma_band_rms_q25 = scipy.stats.scoreatpercentile(sigma_band_trials_rms, 25)
@@ -439,7 +459,6 @@ plt_show_save_fig()
 
 # %%
 # calculate sigma burst trials rms and percentiles to remove outliers
-
 sigma_burst_trials_rms = np.sqrt(np.mean(sigma_burst_trials**2, axis=0))
 
 sigma_burst_rms_q25 = scipy.stats.scoreatpercentile(sigma_burst_trials_rms, 25)
@@ -497,14 +516,14 @@ plt_show_save_fig()
 # reject outliers
 
 XEG_whole_trials = XEG_whole_trials[:,not_outliers]
-XEG_with_50Hz_whole_trials = XEG_with_50Hz_whole_trials[:,not_outliers]
+XEG_with_spectrum_peaks_whole_trials = XEG_with_spectrum_peaks_whole_trials[:,not_outliers]
 sigma_band_whole_trials = sigma_band_whole_trials[:,not_outliers]
 sigma_burst_trials = sigma_burst_trials[:,not_outliers]
 sigma_band_trials_rms = sigma_band_trials_rms[not_outliers]
 sigma_burst_trials_rms = sigma_burst_trials_rms[not_outliers]
 
 print(XEG_whole_trials.shape)
-print(XEG_with_50Hz_whole_trials.shape)
+print(XEG_with_spectrum_peaks_whole_trials.shape)
 print(sigma_band_whole_trials.shape)
 print(sigma_burst_trials.shape)
 print(sigma_band_trials_rms.shape)
@@ -534,11 +553,11 @@ plt_show_save_fig()
 # concatenate trials without outliers
 
 XEG_data_no_outliers = np.concatenate(XEG_whole_trials.T)
-XEG_with_50Hz_data_no_outliers = np.concatenate(XEG_with_50Hz_whole_trials.T)
+XEG_with_spectrum_peaks_data_no_outliers = np.concatenate(XEG_with_spectrum_peaks_whole_trials.T)
 all_stimuli_no_outliers = (np.arange(XEG_whole_trials.shape[1])*XEG_whole_trials.shape[0])
 marker_no_outliers = all_stimuli_no_outliers[1:]
 XEG_data_no_outliers = meet.interpolateEEG(XEG_data_no_outliers, marker_no_outliers, interpolate_win)
-XEG_with_50Hz_data_no_outliers = meet.interpolateEEG(XEG_with_50Hz_data_no_outliers, marker_no_outliers, interpolate_win)
+XEG_with_spectrum_peaks_data_no_outliers = meet.interpolateEEG(XEG_with_spectrum_peaks_data_no_outliers, marker_no_outliers, interpolate_win)
 
 # %%
 # plot asd of data with outliers removed
@@ -558,9 +577,9 @@ plt.xscale('log')
 plt.yscale('log')
 plt.xlim((1,srate//2))
 if(measurement_type == 'EEG'):
-    plt.ylim((1e-3, 5))
+    plt.ylim((0.001, 10))
 else:
-    plt.ylim((1e-1, 500))
+    plt.ylim((0.1, 1000))
 plt.xlabel('f [Hz]')
 plt.ylabel('Amplitude Spectral Density %s' % asd_unit)
 plt.legend()
@@ -568,26 +587,26 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
-# plot asd of data with outliers removed, compare data with and without powerline artifacts
+# plot asd of data with outliers removed, compare data with and without spectrum peaks
 
-data = XEG_with_50Hz_data_no_outliers
+data = XEG_with_spectrum_peaks_data_no_outliers
 nfft = 2**(int(np.log2(srate))-2)
 xf, yf = asd(data, nfft)
 
-plt_header('Cleaning %s signal, outliers removed, show removed powerline artifacts' % measurement_type)
-plt.plot(xf, yf, label='with powerline artifacts')
+plt_header('Cleaning %s signal, outliers removed, show removed spectrum peaks' % measurement_type)
+plt.plot(xf, yf, label='with spectrum peaks artifacts')
 
 data = XEG_data_no_outliers
 xf, yf = asd(data, nfft)
 
-plt.plot(xf, yf, label='powerline artifacts removed')
+plt.plot(xf, yf, label='spectrum peaks removed')
 plt.xscale('log')
 plt.yscale('log')
 plt.xlim((1,srate//2))
 if(measurement_type == 'EEG'):
-    plt.ylim((0.001, 5))
+    plt.ylim((0.001, 10))
 else:
-    plt.ylim((0.1, 500))
+    plt.ylim((0.1, 1000))
 plt.xlabel('f [Hz]')
 plt.ylabel('Amplitude Spectral Density %s' % asd_unit)
 plt.legend()
@@ -595,11 +614,12 @@ plt.grid(True)
 plt_show_save_fig()
 
 # %%
-# create additional signal with evoked response removed
-
 XEG_data = XEG_data_no_outliers
 all_stimuli = all_stimuli_no_outliers
 marker = marker_no_outliers
+
+# %%
+# create additional signal with evoked response removed
 
 XEG_whole_trials_mean = np.mean(XEG_whole_trials, axis=-1)
 XEG_data_no_mean = np.concatenate(XEG_whole_trials.T - XEG_whole_trials_mean)
@@ -670,7 +690,7 @@ plt.ylabel(unit)
 if(measurement_type == 'EEG'):
     plt.ylim((-4, 4))
 else:
-    plt.ylim((-500, 500))
+    plt.ylim((-600, 600))
 plt_show_save_fig()
 
 data = n20_response_trials_mean[:srate//10]
@@ -683,7 +703,7 @@ plt.ylabel(unit)
 if(measurement_type == 'EEG'):
     plt.ylim((-4, 4))
 else:
-    plt.ylim((-500, 500))
+    plt.ylim((-600, 600))
 plt_show_save_fig()
 
 # %%
@@ -701,7 +721,7 @@ plt.ylabel(unit)
 if(measurement_type == 'EEG'):
     plt.ylim((-0.3, 0.3))
 else:
-    plt.ylim((-25, 25))
+    plt.ylim((-30, 30))
 plt_show_save_fig()
 
 data = sigma_band_whole_trials_mean[:srate//10]
@@ -714,7 +734,7 @@ plt.ylabel(unit)
 if(measurement_type == 'EEG'):
     plt.ylim((-0.3, 0.3))
 else:
-    plt.ylim((-25, 25))
+    plt.ylim((-30, 30))
 plt_show_save_fig()
 
 # %%
@@ -758,6 +778,7 @@ stimulus_new = np.zeros(len(XEG_data))
 stimulus_new[marker_no_outliers] = 1.0
 
 out_data = np.stack((XEG_data, XEG_data_no_mean, stimulus_new))
-np.save(os.path.join(data_output_folder, subject_name+'_cleaned_data.npy'), out_data)
+os.makedirs(data_output_folder, exist_ok=True)
+np.save(os.path.join(data_output_folder, filename+'.npy'), out_data)
 
 
