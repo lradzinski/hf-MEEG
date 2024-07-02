@@ -1,6 +1,6 @@
 # %%
 """
-Preprocess_single_channel_recordings.py
+Prep_single_channel_data.py
 Lukasz Radzinski
 Charite Neurophysics Group, Berlin
 Script for preprocessing single channel,
@@ -50,13 +50,13 @@ recording_condition = filename_splitted[4]
 
 data_input_folder = '../Data/raw_data'
 data_output_folder = '../Data/cleaned_data'
-plots_output_folder = '../Results'
+plots_output_folder = '../Results/preprocessing'
 
 use_brown_noise = False
 
 data_input_folder = os.path.join(data_input_folder, date, subject)
 data_output_folder = os.path.join(data_output_folder, date, subject)
-plots_output_folder = os.path.join(plots_output_folder, subject, 'preprocessing', date+'_'+filename)
+plots_output_folder = os.path.join(plots_output_folder, date, filename)
 
 if(measurement_type == 'MEG'):
     srate = 20000
@@ -68,6 +68,7 @@ elif(measurement_type == 'EEG'):
     asd_unit = '[μV/√HZ]'
 
 if(multichannel):
+    print('Can only preprocess single channel recordings')
     sys.exit(0)
 
 # %%
@@ -711,10 +712,18 @@ plt_show_save_fig()
 
 sigma_band_whole_trials_mean = np.mean(sigma_band_whole_trials, axis=-1)
 
+sigma_rms_st = np.sqrt(np.mean(sigma_band_whole_trials[srate*15//1000:srate*30//1000]**2, axis=0))
+noise_rms_st = np.sqrt(np.mean(sigma_band_whole_trials[srate*60//1000:srate*100//1000]**2, axis=0))
+snnr_st = np.mean(sigma_rms_st/noise_rms_st)
+
+sigma_rms_er = np.sqrt(np.mean(sigma_band_whole_trials_mean[srate*15//1000:srate*30//1000]**2))
+noise_rms_er = np.sqrt(np.mean(sigma_band_whole_trials_mean[srate*60//1000:srate*100//1000]**2))
+snnr_er = sigma_rms_er/noise_rms_er
+
 data = sigma_band_whole_trials_mean
 data_x = np.linspace(0, (len(data)-1)/srate, len(data))*1000
 data_y = data
-plt.plot(data_x, data_y)
+plt.plot(data_x, data_y, label='sigma burst\nsnnr st: %6.3f\nsnnr er: %.3f' % (snnr_st, snnr_er))
 plt_header('Sigma burst, average of trials, 450Hz-850Hz bp filter, n = %d' % len(sigma_band_whole_trials.T))
 plt.xlabel('t [ms]')
 plt.ylabel(unit)
@@ -722,12 +731,13 @@ if(measurement_type == 'EEG'):
     plt.ylim((-0.3, 0.3))
 else:
     plt.ylim((-30, 30))
+plt.legend(prop={'family': 'DejaVu Sans Mono'})
 plt_show_save_fig()
 
 data = sigma_band_whole_trials_mean[:srate//10]
 data_x = np.linspace(0, (len(data)-1)/srate, len(data))*1000
 data_y = data
-plt.plot(data_x, data_y)
+plt.plot(data_x, data_y, label='sigma burst\nsnnr st: %6.3f\nsnnr er: %.3f' % (snnr_st, snnr_er))
 plt_header('Sigma burst, average of trials, 450Hz-850Hz bp filter, n = %d' % len(sigma_band_whole_trials.T))
 plt.xlabel('t [ms]')
 plt.ylabel(unit)
@@ -735,6 +745,7 @@ if(measurement_type == 'EEG'):
     plt.ylim((-0.3, 0.3))
 else:
     plt.ylim((-30, 30))
+plt.legend(prop={'family': 'DejaVu Sans Mono'})
 plt_show_save_fig()
 
 # %%
