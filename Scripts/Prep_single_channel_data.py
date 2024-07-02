@@ -3,8 +3,8 @@
 Prep_single_channel_data.py
 Lukasz Radzinski
 Charite Neurophysics Group, Berlin
-Script for preprocessing single channel,
-separate MEG/EEG recordings 
+Script for preprocessing single channel
+MEG/EEG recordings
 """
 
 # %%
@@ -24,7 +24,7 @@ plt.rcParams['figure.figsize'] = [12, 6]
 plt.rcParams['savefig.dpi'] = 600
 
 # %%
-# select subject [S1-S7] and measurement type [MEG, EEG]
+# select file to preprocess
 
 filename = 'S1_MEG_only_sc_stim'
 date = '2018-03-19'
@@ -713,11 +713,11 @@ plt_show_save_fig()
 sigma_band_whole_trials_mean = np.mean(sigma_band_whole_trials, axis=-1)
 
 sigma_rms_st = np.sqrt(np.mean(sigma_band_whole_trials[srate*15//1000:srate*30//1000]**2, axis=0))
-noise_rms_st = np.sqrt(np.mean(sigma_band_whole_trials[srate*60//1000:srate*100//1000]**2, axis=0))
+noise_rms_st = np.sqrt(np.mean(sigma_band_whole_trials[srate*50//1000:srate*200//1000]**2, axis=0))
 snnr_st = np.mean(sigma_rms_st/noise_rms_st)
 
 sigma_rms_er = np.sqrt(np.mean(sigma_band_whole_trials_mean[srate*15//1000:srate*30//1000]**2))
-noise_rms_er = np.sqrt(np.mean(sigma_band_whole_trials_mean[srate*60//1000:srate*100//1000]**2))
+noise_rms_er = np.sqrt(np.mean(sigma_band_whole_trials_mean[srate*50//1000:srate*200//1000]**2))
 snnr_er = sigma_rms_er/noise_rms_er
 
 data = sigma_band_whole_trials_mean
